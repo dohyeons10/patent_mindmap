@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>축산기술분류 인터랙티브 마인드맵</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            user-select: none;
+        }
+
+        /* 사용 안내 팁 */
+        .instruction-tib {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(30, 41, 59, 0.8);
+            padding: 12px 18px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            font-size: 13px;
+            color: #94a3b8;
+            pointer-events: none;
+            z-index: 100;
+            line-height: 1.5;
+        }
+        .instruction-tib strong {
+            color: #38bdf8;
+        }
+
+        /* 마인드맵 컨테이너 */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            cursor: grab;
+            overflow: auto;
+        }
+
+        #canvas-container:active {
+            cursor: grabbing;
+        }
+
+        #mindmap-canvas {
+            width: 2600px;
+            height: 1800px;
+            position: relative;
+            transform-origin: 0 0;
+        }
+
+        /* SVG 연결선 레이어 */
+        #svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .node-link {
+            fill: none;
+            stroke: #475569;
+            stroke-width: 2.5;
+            stroke-dasharray: 4;
+            animation: dash 30s linear infinite;
+            transition: all 0.4s ease;
+        }
+
+        .node-link.active {
+            stroke: #38bdf8;
+            stroke-width: 3;
+            stroke-dasharray: none;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -1000;
+            }
+        }
+
+        /* 노드 공통 스타일 */
+        .node {
+            position: absolute;
+            padding: 14px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: 600;
+            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            z-index: 2;
+            cursor: pointer;
+            text-align: center;
+            max-width: 280px;
+            border: 1px solid transparent;
+        }
+
+        .node:hover {
+            transform: scale(1.05);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+        }
+
+        /* 루트 노드 (중심) */
+        .node-root {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            color: #ffffff;
+            font-size: 18px;
+            padding: 20px 35px;
+            border-radius: 50px;
+            border: 2px solid #60a5fa;
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+        }
+
+        /* 1차 소분류 노드 */
+        .node-sub {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: #f1f5f9;
+            font-size: 14px;
+            border: 1px solid #475569;
+        }
+        .node-sub.expanded {
+            border-color: #38bdf8;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+        }
+
+        /* 2차 세부 정보 노드 */
+        .node-detail {
+            font-size: 12px;
+            font-weight: 500;
+            padding: 10px 14px;
+            max-width: 240px;
+            background: #1e293b;
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+            text-align: left;
+            align-items: flex-start;
+        }
+
+        .node-detail.show {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+        }
+
+        /* 데이터 유형별 상세 색상 테두리 */
+        .type-core { border-left: 4px solid #f59e0b; background: #262522; color: #fef08a;} /* 핵심키워드 */
+        .type-word { border-left: 4px solid #10b981; background: #1c2824; color: #a7f3d0; max-width: 320px; font-size: 11px;} /* 세부키워드 */
+        .type-formula { border-left: 4px solid #ec4899; background: #2b1f27; color: #fbcfe8; max-width: 340px; font-family: monospace; font-size: 11px;} /* 검색식 */
+
+        .node-tag {
+            font-size: 9px;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .tag-core { background: #f59e0b; color: #000; }
+        .tag-word { background: #10b981; color: #000; }
+        .tag-formula { background: #ec4899; color: #000; }
+    </style>
+</head>
+<body>
+
+    <div class="instruction-tib">
+        📌 <strong>스마트 축산기술분류 마인드맵</strong><br>
+        • 각 회색 <strong>소분류 항목</strong>을 누르면 세부 내용이 확장됩니다.<br>
+        • 마우스 드래그를 통해 화면 전체를 움직일 수 있습니다.
+    </div>
+
+    <div id="canvas-container">
+        <div id="mindmap-canvas">
+            <svg id="svg-layer"></svg>
+            </div>
+    </div>
+
+    <script>
+        // 엑셀에서 추출한 데이터 구조화
+        const mindmapData = {
+            name: "축산 기술 분류",
+            children: [
+                {
+                    name: "가축자동착유시스템 AAA",
+                    core: "로봇착유",
+                    keywords: "자동착유, 로봇착유, 유두인식, 유량계, 유질분석, 유선염, 착유컵, 유도게이트, 착유스트레스, 원유냉각, 전착유, 후착유, 젖짜기, 착유실관리, 유방건강, 진공압제어, 착유주기, 세척시스템, 티트컵, Robotic Milking (AMS), Teat Recognition, Milk Quality Analysis",
+                    formula: "(착유 OR 로봇착유 OR 밀킹) AND (유두인식 OR 유질분석 OR 진공제어) AND (자동화 OR 스마트팜)"
+                },
+                {
+                    name: "축산 생육 시스템 AAB",
+                    core: "개체식별",
+                    keywords: "생육모니터링, 증체량, 개체식별, 활동량측정, 행동분석, 발정탐지, BCS(신체충실도), 반추시간, 섭식패턴, 이어태그, RFID/BLE, 영상인식, 딥러닝추적, 체온측정, 보행분석, 승치행동, 생체지수, 개체추적, Individual Identification",
+                    formula: "(가축 OR 개체식별) AND (활동량 OR 행동분석 OR 반추 OR BCS) AND (영상인식 OR 딥러닝 OR 센서)"
+                },
+                {
+                    name: "축산용 사료 AAC",
+                    core: "배합비최적화",
+                    keywords: "사료배합, 첨가제, 기능성사료, 사료효율, 자동급이기, TMR, 조사료, 농축사료, 영양밸런스, 사료저장고, 사료사일로, 급수기, 음수량, 펠릿, 발효사료, 배합비최적화, 기호성증진, 섭취량, Ration Optimization",
+                    formula: "(사료 OR TMR OR 급이) AND (배합비 OR 영양밸런스 OR 기호성) AND (자동급이기 OR 최적화 OR ICT)"
+                },
+                {
+                    name: "축산 육종 번식 AAD",
+                    core: "유전체분석",
+                    keywords: "육종개량, 인공수정, 배아이식, 성감별, 임신진단, 종축선발, 유전체분석, 분만감지, 정자활력, 산자수, 난산예방, 유전형질, 번식효율, 발정동기화, 수정란, 혈통관리, 육종가, SNP분석, Genomic Analysis",
+                    formula: "(육종 OR 인공수정 OR 배아이식) AND (유전체 OR SNP OR 발정탐지) AND (분만감지 OR 데이터기반)"
+                },
+                {
+                    name: "친환경 사양기술 AAE",
+                    core: "탄소중립",
+                    keywords: "저메탄사료, 동물복지, 방목관리, 탄소중립, 가스저감, 케이지프리, 스트레스완화, 유기축산, 탄소발자국, 환경부하저감, 저단백사료, 암모니아저감, 순환농업, 동물행동권, 행동풍부화, 자연채광, Animal Welfare",
+                    formula: "(동물복지 OR 탄소중립 OR 저메탄) AND (케이지프리 OR 악취저감) AND (순환농업 OR ESG)"
+                },
+                {
+                    name: "축산 질병 관리 시스템 ABA",
+                    core: "차단방역",
+                    keywords: "질병예찰, 조기진단, 차단방역, 스마트방역, 열화상감지, 이상행동탐지, 소리인식(기침), 축사소독, 가축전염병, 방역구역, 생체센서, AI진단, 질병예측, 역학조사, 가축보건, Disease Surveillance, Biosecurity",
+                    formula: "(가축질병 OR ASF OR AI OR FMD) AND (조기진단 OR 예찰 OR 차단방역) AND (바이오센서 OR AI분석)"
+                },
+                {
+                    name: "축산 질병 치료제 ABB",
+                    core: "약물전달(DDS)",
+                    keywords: "백신, 치료조성물, 면역증진, 수의약품, 항생제대체재, 경구투여, 투약자동화, 천연추출물치료, 약물전달(DDS), 소염제, 항바이러스제, 구충제, 생균제, 잔류농약검사, 처방관리, Drug Delivery System (DDS)",
+                    formula: "(수의약품 OR 백신 OR 항생제대체재) AND (약물전달 OR DDS OR 경구투여) AND (투약자동화 OR 처방관리)"
+                },
+                {
+                    name: "축산 폐기물 처리 시스템 ABC",
+                    core: "자원화",
+                    keywords: "분뇨처리, 퇴비화, 바이오가스, 악취저감, 액비화, 혐기성소화, 메탄회수, 탈취스크러버, 고액분리, 슬러지처리, 자원화, 미생물제제, 폐수정화, 악취포집, 탄화, 부숙도관리, Biogas Production",
+                    formula: "(가축분뇨 OR 슬러지) AND (퇴비화 OR 바이오가스 OR 혐기성소화) AND (업사이클링 OR 에너지화 OR 탄소회수)"
+                },
+                {
+                    name: "축산 ICT 인프라 시스템 ABD",
+                    core: "농장통합제어",
+                    keywords: "스마트축사, 농장관리시스템(FMS), 환기제어, 온습도센서, 축사통합제어, CCTV모니터링, 단전경보, 화재예방, 가스센서(NH3/H2S), 데이터로거, 무선네트워크(LoRa/LTE), 클라우드관제, 원격제어, 전력관리",
+                    formula: "(스마트축사 OR 축사제어) AND (환경제어 OR FMS OR 환기) AND (사물인터넷 OR IoT OR 빅데이터)"
+                },
+                {
+                    name: "축산 유통․관리 시스템 ABE",
+                    core: "이력관리",
+                    keywords: "축산물이력제, 등급판정, 신선도유지, 콜드체인, 유통기한예측, 블록체인이력, 포장자동화, 도축공정자동화, 원산지판별, 품질분석, 스마트물류, QR/RFID태그, Meat Traceability, Cold Chain Logistics",
+                    formula: "(축산물유통 OR 이력제) AND (콜드체인 OR 등급판정 OR 품질) AND (블록체인 OR 스마트물류 OR 신선도)"
+                }
+            ]
+        };
+
+        const canvas = document.getElementById('mindmap-canvas');
+        const svgLayer = document.getElementById('svg-layer');
+
+        // 시작점(루트 노드) 위치 설정 (트리 구조)
+        const startPosX = 200;
+        const startPosY = 900;
+
+        // --- 노드 드래그 기능 및 선 연결 관리를 위한 상태 ---
+        let draggedNode = null;
+        let nodeStartX, nodeStartY, initialMouseX, initialMouseY;
+        let hasNodeDragged = false;
+        const connections = []; // 연결선 배열
+
+        function makeNodeDraggable(node) {
+            node.addEventListener('mousedown', (e) => {
+                e.stopPropagation(); // 캔버스 전체 드래그(Pan) 이벤트 방지
+                draggedNode = node;
+                nodeStartX = node.offsetLeft;
+                nodeStartY = node.offsetTop;
+                initialMouseX = e.pageX;
+                initialMouseY = e.pageY;
+                hasNodeDragged = false;
+                
+                node.style.cursor = 'grabbing';
+                node.style.zIndex = 10; // 드래그 시 가장 위로 올리기
+            });
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            if (draggedNode) {
+                // 마우스가 일정 픽셀 이상 움직였을 때만 '드래그'로 판정 (클릭 시 미세한 떨림 방지)
+                if (Math.abs(e.pageX - initialMouseX) > 3 || Math.abs(e.pageY - initialMouseY) > 3) {
+                    hasNodeDragged = true;
+                }
+                
+                if (hasNodeDragged) {
+                    e.preventDefault();
+                    const dx = e.pageX - initialMouseX;
+                    const dy = e.pageY - initialMouseY;
+                    draggedNode.style.left = `${nodeStartX + dx}px`;
+                    draggedNode.style.top = `${nodeStartY + dy}px`;
+                    
+                    // 드래그 중 연결선을 실시간으로 노드 위치에 맞게 업데이트
+                    connections.forEach(updateConnection);
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (draggedNode) {
+                draggedNode.style.cursor = 'pointer';
+                draggedNode.style.zIndex = 2; // 초기 z-index 값으로 복구
+                setTimeout(() => { hasNodeDragged = false; }, 0); // 이벤트 버블링 후 초기화
+                draggedNode = null;
+            }
+        });
+
+        // 1. 루트 노드 생성
+        const rootNode = document.createElement('div');
+        rootNode.className = 'node node-root';
+        rootNode.innerText = mindmapData.name;
+        rootNode.style.left = `${startPosX - 100}px`;
+        rootNode.style.top = `${startPosY - 30}px`;
+        canvas.appendChild(rootNode);
+        makeNodeDraggable(rootNode);
+
+        // 노드들의 확장 여부 및 정보를 저장하는 배열
+        let activeLinks = [];
+
+        // 2. 소분류 노드 및 상세 노드 생성 및 배치
+        mindmapData.children.forEach((sub, index) => {
+            // 트리 구조(좌->우)로 소분류 노드 세로 배치
+            const totalSubs = mindmapData.children.length;
+            const gapY = 130; // 소분류 간 세로 간격
+            const subStartY = startPosY - ((totalSubs - 1) * gapY) / 2;
+            
+            const subX = startPosX + 400; // 루트 노드에서 우측으로 400px
+            const subY = subStartY + (index * gapY);
+
+            // 소분류 노드 생성
+            const subNode = document.createElement('div');
+            subNode.className = 'node node-sub';
+            subNode.innerText = sub.name;
+            subNode.style.left = `${subX - 110}px`;
+            subNode.style.top = `${subY - 25}px`;
+            canvas.appendChild(subNode);
+            makeNodeDraggable(subNode);
+
+            // 세부 정보 노드들(핵심키워드, 세부키워드, 검색식)을 담을 배열 생성
+            const details = [
+                { type: 'core', tag: '핵심 키워드', text: sub.core },
+                { type: 'word', tag: '세부 키워드', text: sub.keywords },
+                { type: 'formula', tag: '검색식 구조 개요', text: sub.formula }
+            ];
+
+            const detailElements = [];
+
+            // 각 소분류별 상세 노드 사전 배치 (평소엔 숨김 상태)
+            details.forEach((det, dIdx) => {
+                const detailNode = document.createElement('div');
+                detailNode.className = `node node-detail type-${det.type}`;
+                detailNode.innerHTML = `<span class="node-tag tag-${det.type}">${det.tag}</span><div>${det.text}</div>`;
+                
+                // 소분류 노드 우측으로 가로로 나란히 배치
+                const dGapX = 350; // 상세 노드 간 가로 간격
+                const detX = subX + 300 + (dIdx * dGapX);
+                const detY = subY; // 소분류와 동일한 Y축 선상
+
+                detailNode.style.left = `${detX - 110}px`;
+                detailNode.style.top = `${detY - 30}px`;
+                canvas.appendChild(detailNode);
+                detailElements.push(detailNode);
+                makeNodeDraggable(detailNode);
+            });
+
+            // 초기선(중심 -> 소분류) 그리기
+            const linkConn = createConnection(rootNode, subNode, false);
+            const link = linkConn.path;
+            
+            // 소분류 클릭 이벤트 (토글 기능 구현)
+            subNode.addEventListener('click', (e) => {
+                if (hasNodeDragged) return; // 드래그로 이동한 경우 클릭(확장/축소) 이벤트 무시
+
+                const isExpanded = subNode.classList.toggle('expanded');
+                
+                if (isExpanded) {
+                    // 활성화선 색 변경
+                    link.classList.add('active');
+                    
+                    // 하위 세부 노드 표시 및 연결선 생성
+                    detailElements.forEach((el, dIdx) => {
+                        el.classList.add('show');
+                        
+                        // 소분류 -> 세부노드 연결선 생성
+                        const dLinkConn = createConnection(subNode, el, true);
+                        el._connection = dLinkConn; // 삭제 처리를 위해 객체에 저장
+                    });
+                } else {
+                    link.classList.remove('active');
+                    // 하위 세부 노드 제거 및 연결선 제거
+                    detailElements.forEach((el, dIdx) => {
+                        el.classList.remove('show');
+                        if (el._connection) {
+                            el._connection.path.remove();
+                            const cIdx = connections.indexOf(el._connection);
+                            if (cIdx > -1) connections.splice(cIdx, 1);
+                            el._connection = null;
+                        }
+                    });
+                }
+            });
+        });
+
+        // 부드러운 곡선(Bezier)을 그리는 함수 (노드 드래그 시 실시간 업데이트 지원)
+        function updateConnection(conn) {
+            // 현재 DOM에 위치한 노드의 중앙 좌표를 실시간으로 계산
+            const startX = conn.start.offsetLeft + conn.start.offsetWidth / 2;
+            const startY = conn.start.offsetTop + conn.start.offsetHeight / 2;
+            const endX = conn.end.offsetLeft + conn.end.offsetWidth / 2;
+            const endY = conn.end.offsetTop + conn.end.offsetHeight / 2;
+
+            // 좌에서 우로 자연스럽게 이어지는 S자 곡선(Cubic Bezier)
+            const dStr = `M ${startX} ${startY} C ${startX + (endX - startX)/2} ${startY}, ${startX + (endX - startX)/2} ${endY}, ${endX} ${endY}`;
+            conn.path.setAttribute('d', dStr);
+        }
+
+        function createConnection(startNode, endNode, isDeep) {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.className.baseVal = isDeep ? 'node-link active' : 'node-link';
+            
+            svgLayer.appendChild(path);
+            
+            const conn = { start: startNode, end: endNode, path: path };
+            connections.push(conn);
+            updateConnection(conn); // 최초 생성 시 초기 위치 계산해서 그려주기
+            return conn;
+        }
+
+        // --- 마우스 드래그 화면 이동(Pan) 기능 구현 ---
+        const container = document.getElementById('canvas-container');
+        let isDown = false;
+        let startX, startY, scrollLeft, scrollTop;
+
+        container.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('node')) return; // 노드를 누를 때는 드래그 방지
+            isDown = true;
+            startX = e.pageX - container.offsetLeft;
+            startY = e.pageY - container.offsetTop;
+            scrollLeft = container.scrollLeft;
+            scrollTop = container.scrollTop;
+        });
+
+        container.addEventListener('mouseleave', () => { isDown = false; });
+        container.addEventListener('mouseup', () => { isDown = false; });
+
+        container.addEventListener('mousemove', (e) => {
+            if(!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - container.offsetLeft;
+            const y = e.pageY - container.offsetTop;
+            const walkX = (x - startX) * 1.5;
+            const walkY = (y - startY) * 1.5;
+            container.scrollLeft = scrollLeft - walkX;
+            container.scrollTop = scrollTop - walkY;
+        });
+
+        // 초기 화면 위치 설정 (왼쪽 루트 노드가 보이도록 정렬)
+        window.onload = () => {
+            container.scrollLeft = 0; // 캔버스 맨 왼쪽부터
+            container.scrollTop = startPosY - (window.innerHeight / 2);
+        };
+    </script>
+</body>
+</html>
